@@ -1,0 +1,2 @@
+Known,Open,F1-score,Accuracy,dataset,known_cls_ratio,labeled_ratio,seed
+74.9774,79.2635,75.0153,78.61,oos,0.75,1.0,0
