@@ -13,7 +13,7 @@ from os.path import join
 
 from data_process import *
 
-from transformers import ElectraModel, ElectraConfig,  ElectraTokenizer
+from transformers import RobertaModel, RobertaConfig,  RobertaTokenizer
 from transformers import AdamW, get_linear_schedule_with_warmup
 
 from SpanQA import SpanQA, compute_loss
@@ -27,7 +27,7 @@ def get_tokens(token_ids, starts, ends):
     tokens = []
     assert len(token_ids) == len(starts)
     for i in range(len(token_ids)):
-        tokens.append(token_ids[i][starts[i]:ends[i]])
+        tokens.append(token_ids[i][starts[i]:ends[i]+1])
     return tokens
 
 def get_em_scores(start_predicts, end_predicts, start_labels, end_labels):
@@ -59,7 +59,7 @@ def evaluate(net, test_iter):
 
     for i, batch in enumerate(test_iter):
         net.eval()
-        batch = tuple(t.to('cuda:1') for t in batch)   # to cuda
+        batch = tuple(t.to('cuda:0') for t in batch)   # to cuda
         with torch.no_grad():
             inputs = {
                 "input_ids" : batch[0],
@@ -92,6 +92,7 @@ def train_batch(net, batch, trainer, scheduler):
     except RuntimeError:
         logging.error(start_logits.shape, end_logits.shape, batch[3].shape, batch[4].shape)
         logging.error(start_logits, end_logits, batch[3], batch[4])
+    torch.nn.utils.clip_grad_norm_(net.parameters(), 1.0) # 梯度裁剪
     trainer.step()
     scheduler.step()
     net.zero_grad()
@@ -104,7 +105,7 @@ def train_epoch(net, train_iter, test_iter, trainer, scheduler, num_epochs):
     for epoch in range(int(num_epochs)):
         logging.info(f'开始第{epoch+1}轮训练')
         for i, batch in enumerate(train_iter):
-            batch = tuple(t.to('cuda:1') for t in batch)   # to cuda
+            batch = tuple(t.to('cuda:0') for t in batch)   # to cuda
             l = train_batch(net, batch, trainer, scheduler)
             if (i + 1) % 200 == 0 or i == num_batches - 1:
                 logging.info(f'loss: {l:.6f}')
@@ -164,9 +165,9 @@ def main():
     )
 
     #electra_path = 'C:\\Users\\L0phTg\\work\\nlp\\bert-models\\google-electra-base-discriminator'
-    config = ElectraConfig.from_pretrained(args.model_path)
-    tokenizer = ElectraTokenizer.from_pretrained(args.model_path)
-    pretrain_model = ElectraModel.from_pretrained(args.model_path, config=config)
+    config = RobertaConfig.from_pretrained(args.model_path)
+    tokenizer = RobertaTokenizer.from_pretrained(args.model_path)
+    pretrain_model = RobertaModel.from_pretrained(args.model_path, config=config)
 
     # 加载数据
     logging.info("加载数据...")
@@ -176,6 +177,10 @@ def main():
     # 2. 得到features
     train_features = convert_examples_to_features(train_examples, tokenizer, is_training=True)
     dev_features = convert_examples_to_features(dev_examples, tokenizer, is_training=True)
+    # train_examples = load_data('./data/train_examples.pkl.gz')    
+    # train_features = load_data('./data/train_features.pkl.gz')
+    # dev_examples = load_data('./data/dev_examples.pkl.gz')    
+    # dev_features = load_data('./data/dev_features.pkl.gz')
     logging.info(f'训练集:{len(train_features)}, 测试集:{len(dev_features)}')
     # 3. 转换为tensor
     train_dataset = convert_features_to_dataset(train_features, is_training=True)
@@ -194,7 +199,7 @@ def main():
     dev_dataloader = DataLoader(dev_dataset, sampler=dev_sampler, batch_size=dev_batch_size)
     # 模型定义
     net = SpanQA(pretrain_model)
-    net.to('cuda:1')
+    net.to('cuda:0')
 
     no_decay = ["bias", "LayerNorm.weight"]
     optimizer_grouped_parameters = [
@@ -215,6 +220,7 @@ def main():
     # 训练
     logging.info("开始训练...")
     train_epoch(net, train_dataloader, dev_dataloader, trainer, scheduler, num_epochs)
+    #print(evaluate(net, dev_dataloader))
 
 if __name__ == '__main__':
     main()

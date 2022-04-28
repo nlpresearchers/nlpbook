@@ -1,10 +1,3 @@
-'''
-Author: nlpresearch
-LastEditTime: 2022-04-21 20:35:36
-LastEditors: nlpresearch
-Description: Do not edit
-FilePath: \SpanQA\SpanQA.py
-'''
 import torch
 from torch.nn import CrossEntropyLoss, BCELoss
 from torch import nn
